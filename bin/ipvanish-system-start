@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_dir="${IPVANISH_CONFIG_DIR:-/home/ces/Downloads/ipvanish-configs}"
+auth_file="${IPVANISH_AUTH_FILE:-/home/ces/.config/ipvanish/auth.txt}"
+match="${IPVANISH_MATCH:-random}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+Usage:
+  IPVANISH_MATCH=random ipvanish-system-start
+  IPVANISH_MATCH=Reykjavik ipvanish-system-start
+
+This is intended to be run by systemd as root.
+EOF
+  exit 0
+fi
+
+if [[ ! -r "${auth_file}" ]]; then
+  printf "Missing auth file: %s\n" "${auth_file}" >&2
+  exit 1
+fi
+
+if [[ ! -d "${config_dir}" ]]; then
+  printf "Missing config directory: %s\n" "${config_dir}" >&2
+  exit 1
+fi
+
+if [[ "${match}" == "random" ]]; then
+  config="$(find "${config_dir}" -maxdepth 1 -type f -name '*.ovpn' | shuf -n 1)"
+else
+  config="$(find "${config_dir}" -maxdepth 1 -type f -iname "*${match}*.ovpn" | shuf -n 1)"
+fi
+
+if [[ -z "${config:-}" ]]; then
+  printf "No IPVanish config matched: %s\n" "${match}" >&2
+  exit 1
+fi
+
+printf "Starting IPVanish with %s\n" "$(basename "${config}")"
+
+exec /usr/sbin/openvpn \
+  --config "${config}" \
+  --auth-user-pass "${auth_file}" \
+  --auth-nocache \
+  --verb 3

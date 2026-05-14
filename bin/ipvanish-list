@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_dir="${IPVANISH_CONFIG_DIR:-${HOME}/Downloads/ipvanish-configs}"
+pattern="${1:-}"
+
+if [[ ! -d "${config_dir}" ]]; then
+  printf "Config directory not found: %s\n" "${config_dir}" >&2
+  exit 1
+fi
+
+find "${config_dir}" -maxdepth 1 -type f -name '*.ovpn' -printf '%f\n' \
+  | sed 's/\.ovpn$//' \
+  | if [[ -n "${pattern}" ]]; then grep -i -- "${pattern}"; else cat; fi \
+  | sort

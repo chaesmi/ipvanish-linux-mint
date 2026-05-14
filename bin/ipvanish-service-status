@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+systemctl --no-pager status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service || true
+printf "\n"
+/home/ces/.local/bin/ipvanish-status

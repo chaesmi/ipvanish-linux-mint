@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+match="${1:-}"
+config_dir="/home/ces/Downloads/ipvanish-configs"
+override_dir="/etc/systemd/system/ipvanish.service.d"
+override_file="${override_dir}/override.conf"
+
+if [[ -z "${match}" || "${match}" == "-h" || "${match}" == "--help" ]]; then
+  printf "Usage: ipvanish-set-location-root {random|location-match}\n" >&2
+  exit 2
+fi
+
+if [[ "${match}" != "random" ]]; then
+  if [[ ! "${match}" =~ ^[A-Za-z0-9._ -]+$ ]]; then
+    printf "Refusing unsafe match string: %s\n" "${match}" >&2
+    exit 2
+  fi
+
+  count="$(find "${config_dir}" -maxdepth 1 -type f -iname "*${match}*.ovpn" | wc -l)"
+  if [[ "${count}" -eq 0 ]]; then
+    printf "No IPVanish configs matched: %s\n" "${match}" >&2
+    exit 1
+  fi
+fi
+
+mkdir -p "${override_dir}"
+{
+  printf "[Service]\n"
+  printf "Environment=IPVANISH_MATCH=%s\n" "${match}"
+} > "${override_file}"
+
+systemctl daemon-reload
+printf "IPVanish boot location set to: %s\n" "${match}"

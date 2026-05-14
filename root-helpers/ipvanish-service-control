@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-status}"
+
+case "${action}" in
+  start)
+    systemctl start ipvanish.service ipvanish-watchdog.timer
+    ;;
+  stop)
+    systemctl stop ipvanish-watchdog.timer ipvanish.service
+    ;;
+  restart)
+    systemctl restart ipvanish.service
+    systemctl start ipvanish-watchdog.timer
+    ;;
+  status)
+    systemctl --no-pager status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service
+    ;;
+  enable)
+    systemctl enable ipvanish.service ipvanish-watchdog.timer
+    ;;
+  disable)
+    systemctl disable ipvanish.service ipvanish-watchdog.timer
+    ;;
+  *)
+    printf "Usage: ipvanish-service-control {start|stop|restart|status|enable|disable}\n" >&2
+    exit 2
+    ;;
+esac

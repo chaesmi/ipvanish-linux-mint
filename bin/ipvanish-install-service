@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+unit_dir="/home/ces/.local/share/ipvanish-systemd"
+
+sudo install -m 0644 "${unit_dir}/ipvanish.service" /etc/systemd/system/ipvanish.service
+sudo install -m 0644 "${unit_dir}/ipvanish-watchdog.service" /etc/systemd/system/ipvanish-watchdog.service
+sudo install -m 0644 "${unit_dir}/ipvanish-watchdog.timer" /etc/systemd/system/ipvanish-watchdog.timer
+sudo install -m 0755 "${unit_dir}/root-helpers/ipvanish-service-control" /usr/local/sbin/ipvanish-service-control
+sudo install -m 0755 "${unit_dir}/root-helpers/ipvanish-set-location-root" /usr/local/sbin/ipvanish-set-location-root
+sudo install -m 0755 "${unit_dir}/root-helpers/ipvanish-killswitch-root" /usr/local/sbin/ipvanish-killswitch-root
+sudo install -m 0440 "${unit_dir}/sudoers.d/ipvanish" /etc/sudoers.d/ipvanish
+sudo visudo -cf /etc/sudoers.d/ipvanish
+
+sudo systemctl daemon-reload
+sudo systemctl enable ipvanish.service ipvanish-watchdog.timer
+
+cat <<'EOF'
+Installed and enabled:
+  ipvanish.service
+  ipvanish-watchdog.timer
+
+The VPN will start automatically on next boot.
+
+To start it now:
+  sudo ipvanish-service-control start
+
+To stop it:
+  sudo ipvanish-service-control stop
+
+To choose a boot location:
+  sudo ipvanish-set-location-root Reykjavik
+
+To check status:
+  ipvanish-service-status
+EOF

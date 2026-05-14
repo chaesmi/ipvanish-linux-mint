@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+match="${1:-}"
+config_dir="/home/ces/Downloads/ipvanish-configs"
+override_dir="/etc/systemd/system/ipvanish.service.d"
+override_file="${override_dir}/override.conf"
+
+if [[ -z "${match}" || "${match}" == "-h" || "${match}" == "--help" ]]; then
+  cat <<'EOF'
+Usage:
+  ipvanish-set-location random
+  ipvanish-set-location Reykjavik
+  ipvanish-set-location Chicago
+
+This controls what ipvanish.service chooses at boot.
+EOF
+  exit 0
+fi
+
+if [[ "${match}" != "random" ]]; then
+  count="$(find "${config_dir}" -maxdepth 1 -type f -iname "*${match}*.ovpn" | wc -l)"
+  if [[ "${count}" -eq 0 ]]; then
+    printf "No configs matched '%s'. Try: ipvanish-list %s\n" "${match}" "${match}" >&2
+    exit 1
+  fi
+  printf "Matched %s config(s) for '%s'.\n" "${count}" "${match}"
+fi
+
+if command -v /usr/local/sbin/ipvanish-set-location-root >/dev/null 2>&1; then
+  sudo /usr/local/sbin/ipvanish-set-location-root "${match}"
+else
+  sudo mkdir -p "${override_dir}"
+  printf "[Service]\nEnvironment=IPVANISH_MATCH=%s\n" "${match}" | sudo tee "${override_file}" >/dev/null
+  sudo systemctl daemon-reload
+fi
+
+printf "ipvanish.service will use IPVANISH_MATCH=%s on next start.\n" "${match}"
+printf "Restart now with: sudo systemctl restart ipvanish.service\n"

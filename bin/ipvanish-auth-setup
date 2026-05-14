@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_dir="${HOME}/.config/ipvanish"
+auth_file="${config_dir}/auth.txt"
+
+mkdir -p "${config_dir}"
+chmod 700 "${config_dir}"
+
+printf "IPVanish username: "
+read -r username
+printf "IPVanish password: "
+read -rs password
+printf "\n"
+
+umask 077
+{
+  printf "%s\n" "${username}"
+  printf "%s\n" "${password}"
+} > "${auth_file}"
+
+chmod 600 "${auth_file}"
+printf "Saved credentials to %s\n" "${auth_file}"

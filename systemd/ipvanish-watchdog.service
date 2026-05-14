@@ -1,0 +1,8 @@
+[Unit]
+Description=Check and restart IPVanish VPN if needed
+Wants=network-online.target
+After=network-online.target ipvanish.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/ces/.local/bin/ipvanish-healthcheck

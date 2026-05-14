@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+choice="${1:-random}"
+delay="${IPVANISH_RETRY_DELAY:-10}"
+
+while true; do
+  notify-send "IPVanish" "Starting VPN: ${choice}" 2>/dev/null || true
+
+  set +e
+  ipvanish-connect "${choice}"
+  status="$?"
+  set -e
+
+  notify-send -u critical "IPVanish" "VPN stopped with exit code ${status}. Retrying in ${delay}s." 2>/dev/null || true
+  sleep "${delay}"
+done

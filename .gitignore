@@ -1,0 +1,5 @@
+auth.txt
+*.ovpn
+*.log
+*.swp
+.vpn-watch.swp

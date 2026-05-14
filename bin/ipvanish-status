@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf "Tunnel interfaces:\n"
+if ip -brief link show 2>/dev/null | awk '{print $1}' | grep -E '^(tun|wg)[0-9]+$'; then
+  :
+else
+  printf "  none detected\n"
+fi
+
+printf "\nOpenVPN processes:\n"
+if pgrep -a openvpn; then
+  :
+else
+  printf "  none detected\n"
+fi
+
+printf "\nNetworkManager VPNs:\n"
+if command -v nmcli >/dev/null 2>&1; then
+  if nmcli -t -f NAME,TYPE,STATE connection show --active 2>/dev/null | grep ':vpn:activated$'; then
+    :
+  else
+    printf "  none detected by NetworkManager\n"
+  fi
+else
+  printf "  nmcli not installed\n"
+fi
+
+printf "\nPublic network:\n"
+curl -fsS --max-time 10 https://ipinfo.io/org 2>/dev/null || printf "  unknown"
+printf "\n"

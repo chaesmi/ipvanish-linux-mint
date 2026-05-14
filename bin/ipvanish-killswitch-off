@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v /usr/local/sbin/ipvanish-killswitch-root >/dev/null 2>&1; then
+  sudo /usr/local/sbin/ipvanish-killswitch-root off
+else
+  printf "Root helper is not installed. Run ipvanish-install-service first.\n" >&2
+  exit 1
+fi

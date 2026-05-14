@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_dir="${IPVANISH_CONFIG_DIR:-${HOME}/Downloads/ipvanish-configs}"
+auth_file="${IPVANISH_AUTH_FILE:-${HOME}/.config/ipvanish/auth.txt}"
+choice="${1:-random}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ipvanish-connect random
+  ipvanish-connect chicago
+  ipvanish-connect ipvanish-US-Chicago-chi-b42
+  ipvanish-connect /full/path/to/server.ovpn
+
+Set IPVANISH_CONFIG_DIR to use a different config folder.
+Run ipvanish-auth-setup first if you do not want OpenVPN to prompt for credentials.
+EOF
+}
+
+if [[ "${choice}" == "-h" || "${choice}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+pick_config() {
+  local query="${1}"
+
+  if [[ -f "${query}" ]]; then
+    printf "%s\n" "${query}"
+    return
+  fi
+
+  if [[ ! -d "${config_dir}" ]]; then
+    printf "Config directory not found: %s\n" "${config_dir}" >&2
+    exit 1
+  fi
+
+  if [[ "${query}" == "random" ]]; then
+    find "${config_dir}" -maxdepth 1 -type f -name '*.ovpn' | shuf -n 1
+    return
+  fi
+
+  local match_count
+  match_count="$(find "${config_dir}" -maxdepth 1 -type f -iname "*${query}*.ovpn" | wc -l)"
+
+  if [[ "${match_count}" -eq 0 ]]; then
+    printf "No IPVanish config matched: %s\n" "${query}" >&2
+    exit 1
+  fi
+
+  if [[ "${match_count}" -gt 1 ]]; then
+    printf "Matched %s configs for '%s'; choosing one at random.\n" "${match_count}" "${query}" >&2
+  fi
+
+  find "${config_dir}" -maxdepth 1 -type f -iname "*${query}*.ovpn" | shuf -n 1
+}
+
+config="$(pick_config "${choice}")"
+
+if [[ -z "${config}" ]]; then
+  printf "No .ovpn config files found in %s\n" "${config_dir}" >&2
+  exit 1
+fi
+
+printf "Connecting with %s\n" "$(basename "${config}")"
+
+args=(openvpn --config "${config}" --verb 3)
+if [[ -f "${auth_file}" ]]; then
+  args+=(--auth-user-pass "${auth_file}")
+fi
+
+exec sudo "${args[@]}"

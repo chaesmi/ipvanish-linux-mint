@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cat <<'EOF'
+This enables a UFW outbound kill switch:
+  - default deny outgoing
+  - allow outgoing through tun0
+  - allow OpenVPN UDP/1194 on your physical network
+  - allow DNS for resolving VPN hostnames
+  - allow RFC1918 LAN access
+
+If you use remote SSH or unusual services, review before continuing.
+EOF
+
+read -r -p "Enable kill switch now? Type YES: " answer
+if [[ "${answer}" != "YES" ]]; then
+  printf "Aborted.\n"
+  exit 1
+fi
+
+if command -v /usr/local/sbin/ipvanish-killswitch-root >/dev/null 2>&1; then
+  sudo /usr/local/sbin/ipvanish-killswitch-root on
+else
+  printf "Root helper is not installed. Run ipvanish-install-service first.\n" >&2
+  exit 1
+fi

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+urgency="${1:-critical}"
+title="${2:-IPVanish VPN}"
+message="${3:-VPN needs attention.}"
+uid="$(id -u ces)"
+runtime_dir="/run/user/${uid}"
+
+export DISPLAY="${DISPLAY:-:0}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-${runtime_dir}}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${runtime_dir}/bus}"
+
+notify-send -u "${urgency}" "${title}" "${message}" 2>/dev/null || true
+
+if command -v zenity >/dev/null 2>&1; then
+  timeout 45s zenity --warning --title="${title}" --text="${message}" 2>/dev/null || true
+fi
