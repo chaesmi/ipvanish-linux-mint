@@ -145,6 +145,27 @@ ipvanish-service-status
 vpn-watch
 ```
 
+## Desktop Alerts
+
+When the watchdog detects that the VPN is unhealthy, it attempts to restart
+`ipvanish.service`. If restart fails, or if no tunnel is active after restart,
+`ipvanish-healthcheck` calls `ipvanish-desktop-alert`.
+
+The alert helper uses:
+
+- `notify-send` for a desktop notification
+- `zenity` for a visible warning popup window
+
+The popup is intentionally implemented with `zenity` instead of Tk because
+Linux Mint commonly has `zenity` available and it integrates with the desktop
+session without needing a custom Python/Tk script.
+
+Test the popup manually:
+
+```bash
+ipvanish-desktop-alert critical "IPVanish test" "This is a VPN warning test."
+```
+
 ## Kill Switch
 
 Enable:
