@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-config_dir="${IPVANISH_CONFIG_DIR:-/home/ces/Downloads/ipvanish-configs}"
-auth_file="${IPVANISH_AUTH_FILE:-/home/ces/.config/ipvanish/auth.txt}"
+vpn_home="${IPVANISH_HOME:-${HOME}}"
+config_dir="${IPVANISH_CONFIG_DIR:-${vpn_home}/Downloads/ipvanish-configs}"
+auth_file="${IPVANISH_AUTH_FILE:-${vpn_home}/.config/ipvanish/auth.txt}"
 match="${IPVANISH_MATCH:-random}"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then

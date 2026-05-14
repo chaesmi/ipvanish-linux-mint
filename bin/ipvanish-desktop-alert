@@ -4,7 +4,8 @@ set -euo pipefail
 urgency="${1:-critical}"
 title="${2:-IPVanish VPN}"
 message="${3:-VPN needs attention.}"
-uid="$(id -u ces)"
+alert_user="${IPVANISH_USER:-${USER}}"
+uid="$(id -u "${alert_user}")"
 runtime_dir="/run/user/${uid}"
 
 export DISPLAY="${DISPLAY:-:0}"

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 match="${1:-}"
-config_dir="/home/ces/Downloads/ipvanish-configs"
+vpn_home="${IPVANISH_HOME:-$(getent passwd "${SUDO_USER:-${USER}}" | cut -d: -f6)}"
+config_dir="${IPVANISH_CONFIG_DIR:-${vpn_home}/Downloads/ipvanish-configs}"
 override_dir="/etc/systemd/system/ipvanish.service.d"
 override_file="${override_dir}/override.conf"
 

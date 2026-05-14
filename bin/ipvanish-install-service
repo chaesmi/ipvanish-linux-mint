@@ -1,15 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-unit_dir="/home/ces/.local/share/ipvanish-systemd"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+runtime_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/ipvanish-systemd"
+current_user="${SUDO_USER:-${USER}}"
 
-sudo install -m 0644 "${unit_dir}/ipvanish.service" /etc/systemd/system/ipvanish.service
-sudo install -m 0644 "${unit_dir}/ipvanish-watchdog.service" /etc/systemd/system/ipvanish-watchdog.service
-sudo install -m 0644 "${unit_dir}/ipvanish-watchdog.timer" /etc/systemd/system/ipvanish-watchdog.timer
-sudo install -m 0755 "${unit_dir}/root-helpers/ipvanish-service-control" /usr/local/sbin/ipvanish-service-control
-sudo install -m 0755 "${unit_dir}/root-helpers/ipvanish-set-location-root" /usr/local/sbin/ipvanish-set-location-root
-sudo install -m 0755 "${unit_dir}/root-helpers/ipvanish-killswitch-root" /usr/local/sbin/ipvanish-killswitch-root
-sudo install -m 0440 "${unit_dir}/sudoers.d/ipvanish" /etc/sudoers.d/ipvanish
+mkdir -p "${runtime_dir}/root-helpers" "${runtime_dir}/sudoers.d"
+
+sed \
+  -e "s|__HOME__|${HOME}|g" \
+  -e "s|__USER__|${current_user}|g" \
+  "${repo_dir}/systemd/ipvanish.service" > "${runtime_dir}/ipvanish.service"
+
+sed \
+  -e "s|__HOME__|${HOME}|g" \
+  -e "s|__USER__|${current_user}|g" \
+  "${repo_dir}/systemd/ipvanish-watchdog.service" > "${runtime_dir}/ipvanish-watchdog.service"
+
+cp "${repo_dir}/systemd/ipvanish-watchdog.timer" "${runtime_dir}/ipvanish-watchdog.timer"
+cp "${repo_dir}/root-helpers/"* "${runtime_dir}/root-helpers/"
+
+sed \
+  -e "s|__USER__|${current_user}|g" \
+  "${repo_dir}/sudoers.d/ipvanish" > "${runtime_dir}/sudoers.d/ipvanish"
+
+sudo install -m 0644 "${runtime_dir}/ipvanish.service" /etc/systemd/system/ipvanish.service
+sudo install -m 0644 "${runtime_dir}/ipvanish-watchdog.service" /etc/systemd/system/ipvanish-watchdog.service
+sudo install -m 0644 "${runtime_dir}/ipvanish-watchdog.timer" /etc/systemd/system/ipvanish-watchdog.timer
+sudo install -m 0755 "${runtime_dir}/root-helpers/ipvanish-service-control" /usr/local/sbin/ipvanish-service-control
+sudo install -m 0755 "${runtime_dir}/root-helpers/ipvanish-set-location-root" /usr/local/sbin/ipvanish-set-location-root
+sudo install -m 0755 "${runtime_dir}/root-helpers/ipvanish-killswitch-root" /usr/local/sbin/ipvanish-killswitch-root
+sudo install -m 0440 "${runtime_dir}/sudoers.d/ipvanish" /etc/sudoers.d/ipvanish
 sudo visudo -cf /etc/sudoers.d/ipvanish
 
 sudo systemctl daemon-reload

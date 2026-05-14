@@ -5,4 +5,6 @@ After=network-online.target ipvanish.service
 
 [Service]
 Type=oneshot
-ExecStart=/home/ces/.local/bin/ipvanish-healthcheck
+Environment=IPVANISH_USER=__USER__
+Environment=IPVANISH_HOME=__HOME__
+ExecStart=__HOME__/.local/bin/ipvanish-healthcheck

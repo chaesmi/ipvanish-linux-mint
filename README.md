@@ -12,11 +12,11 @@ This repo does not include IPVanish credentials or `.ovpn` server files.
 
 ## Expected Local Paths
 
-The scripts currently expect:
+The scripts default to:
 
 ```text
-/home/ces/Downloads/ipvanish-configs
-/home/ces/.config/ipvanish/auth.txt
+${HOME}/Downloads/ipvanish-configs
+${HOME}/.config/ipvanish/auth.txt
 ```
 
 Create the auth file with:
@@ -49,6 +49,17 @@ That command installs:
 /usr/local/sbin/ipvanish-set-location-root
 /usr/local/sbin/ipvanish-killswitch-root
 /etc/sudoers.d/ipvanish
+```
+
+The installer renders the systemd and sudoers templates using the current
+`${HOME}` and `${USER}` values, so the installed units point back to the
+installing user's home directory.
+
+You can override the default config/auth locations with:
+
+```bash
+export IPVANISH_CONFIG_DIR="${HOME}/Downloads/ipvanish-configs"
+export IPVANISH_AUTH_FILE="${HOME}/.config/ipvanish/auth.txt"
 ```
 
 ## Common Commands
