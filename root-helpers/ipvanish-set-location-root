@@ -3,7 +3,7 @@ set -euo pipefail
 
 match="${1:-}"
 vpn_home="${IPVANISH_HOME:-$(getent passwd "${SUDO_USER:-${USER}}" | cut -d: -f6)}"
-config_dir="${IPVANISH_CONFIG_DIR:-${vpn_home}/Downloads/ipvanish-configs}"
+config_dir="${IPVANISH_CONFIG_DIR:-${vpn_home}/.config/ipvanish/configs}"
 override_dir="/etc/systemd/system/ipvanish.service.d"
 override_file="${override_dir}/override.conf"
 
@@ -13,7 +13,7 @@ if [[ -z "${match}" || "${match}" == "-h" || "${match}" == "--help" ]]; then
 fi
 
 if [[ "${match}" != "random" ]]; then
-  if [[ ! "${match}" =~ ^[A-Za-z0-9._ -]+$ ]]; then
+  if [[ "${match}" == *[!A-Za-z0-9._\ -]* ]]; then
     printf "Refusing unsafe match string: %s\n" "${match}" >&2
     exit 2
   fi

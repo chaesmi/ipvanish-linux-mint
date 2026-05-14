@@ -15,7 +15,7 @@ This repo does not include IPVanish credentials or `.ovpn` server files.
 The scripts default to:
 
 ```text
-${HOME}/Downloads/ipvanish-configs
+${HOME}/.config/ipvanish/configs
 ${HOME}/.config/ipvanish/auth.txt
 ```
 
@@ -58,7 +58,7 @@ installing user's home directory.
 You can override the default config/auth locations with:
 
 ```bash
-export IPVANISH_CONFIG_DIR="${HOME}/Downloads/ipvanish-configs"
+export IPVANISH_CONFIG_DIR="${HOME}/.config/ipvanish/configs"
 export IPVANISH_AUTH_FILE="${HOME}/.config/ipvanish/auth.txt"
 ```
 
@@ -144,6 +144,10 @@ ipvanish-status
 ipvanish-service-status
 vpn-watch
 ```
+
+`ipvanish-status` shows the selected IPVanish location, `.ovpn` config path,
+remote server, tunnel interface, OpenVPN process, NetworkManager VPN state, and
+public network.
 
 ## Desktop Alerts
 

@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+state_file="${IPVANISH_STATE_FILE:-/run/ipvanish/current-config}"
+
+format_location() {
+  local name="${1}"
+  name="${name%.ovpn}"
+  name="${name#ipvanish-}"
+  name="${name%-[a-z][a-z][a-z]-[abc][0-9][0-9]}"
+  printf "%s\n" "${name//-/ }"
+}
+
+printf "Selected IPVanish server:\n"
+if [[ -r "${state_file}" ]]; then
+  config="$(cat "${state_file}")"
+  printf "  Location: %s\n" "$(format_location "$(basename "${config}")")"
+  printf "  Config: %s\n" "${config}"
+  if [[ -r "${config}" ]]; then
+    remote="$(awk '$1 == "remote" {print $2 ":" $3; exit}' "${config}")"
+    printf "  Remote: %s\n" "${remote:-unknown}"
+  fi
+else
+  printf "  unknown; %s is not readable\n" "${state_file}"
+fi
+
 printf "Tunnel interfaces:\n"
 if ip -brief link show 2>/dev/null | awk '{print $1}' | grep -E '^(tun|wg)[0-9]+$'; then
   :

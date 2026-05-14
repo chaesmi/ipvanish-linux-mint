@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-config_dir="${IPVANISH_CONFIG_DIR:-${HOME}/Downloads/ipvanish-configs}"
+config_dir="${IPVANISH_CONFIG_DIR:-${HOME}/.config/ipvanish/configs}"
 pattern="${1:-}"
 
 if [[ ! -d "${config_dir}" ]]; then

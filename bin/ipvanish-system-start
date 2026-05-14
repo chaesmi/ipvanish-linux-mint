@@ -2,9 +2,11 @@
 set -euo pipefail
 
 vpn_home="${IPVANISH_HOME:-${HOME}}"
-config_dir="${IPVANISH_CONFIG_DIR:-${vpn_home}/Downloads/ipvanish-configs}"
+config_dir="${IPVANISH_CONFIG_DIR:-${vpn_home}/.config/ipvanish/configs}"
 auth_file="${IPVANISH_AUTH_FILE:-${vpn_home}/.config/ipvanish/auth.txt}"
 match="${IPVANISH_MATCH:-random}"
+state_dir="${IPVANISH_STATE_DIR:-/run/ipvanish}"
+state_file="${state_dir}/current-config"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'EOF'
@@ -39,6 +41,8 @@ if [[ -z "${config:-}" ]]; then
 fi
 
 printf "Starting IPVanish with %s\n" "$(basename "${config}")"
+mkdir -p "${state_dir}"
+printf "%s\n" "${config}" > "${state_file}"
 
 exec /usr/sbin/openvpn \
   --config "${config}" \

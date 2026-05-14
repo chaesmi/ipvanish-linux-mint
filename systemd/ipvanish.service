@@ -7,7 +7,7 @@ After=network-online.target
 Type=simple
 Environment=IPVANISH_USER=__USER__
 Environment=IPVANISH_HOME=__HOME__
-Environment=IPVANISH_CONFIG_DIR=__HOME__/Downloads/ipvanish-configs
+Environment=IPVANISH_CONFIG_DIR=__HOME__/.config/ipvanish/configs
 Environment=IPVANISH_AUTH_FILE=__HOME__/.config/ipvanish/auth.txt
 Environment=IPVANISH_MATCH=random
 ExecStart=__HOME__/.local/bin/ipvanish-system-start

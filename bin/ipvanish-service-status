@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-systemctl --no-pager status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service || true
-printf "\n"
 "${HOME}/.local/bin/ipvanish-status"
+printf "\n"
+systemctl --no-pager --full status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service || true

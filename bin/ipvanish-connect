@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-config_dir="${IPVANISH_CONFIG_DIR:-${HOME}/Downloads/ipvanish-configs}"
+config_dir="${IPVANISH_CONFIG_DIR:-${HOME}/.config/ipvanish/configs}"
 auth_file="${IPVANISH_AUTH_FILE:-${HOME}/.config/ipvanish/auth.txt}"
 choice="${1:-random}"
 
