@@ -1,78 +1,158 @@
 # IPVanish Linux Mint Watchdog
 
-Scripts and systemd units for running IPVanish OpenVPN on Linux Mint with:
+This repository is the source of truth for the local IPVanish OpenVPN helper
+scripts on this machine.
 
-- boot-time VPN startup
-- automatic restart checks
-- desktop alerts when restart fails
+It provides:
+
+- boot-time VPN startup with systemd
+- automatic health checks and restart attempts
+- desktop alerts when the watchdog cannot recover the tunnel
+- location selection for the next service start
 - optional UFW-based kill switch
-- narrow passwordless sudo helpers
+- narrow root helpers for systemd, UFW, and service override changes
 
-This repo does not include IPVanish credentials or `.ovpn` server files.
+Credentials and IPVanish `.ovpn` server files are not stored in this repo.
 
-## Expected Local Paths
+## Layout
 
-The scripts default to:
+Source files live here:
 
 ```text
-${HOME}/.config/ipvanish/configs
-${HOME}/.config/ipvanish/auth.txt
+~/Documents/IPVanish/
+  bin/           user-facing commands
+  root-helpers/  root-owned helper commands installed to /usr/local/sbin
+  systemd/       systemd unit templates
+  sudoers.d/     sudoers template
 ```
 
-Create the auth file with:
+Installed runtime locations:
+
+```text
+~/.local/bin/ipvanish-*          symlinks to ~/Documents/IPVanish/bin/
+/usr/local/sbin/ipstatus         compact status shortcut
+/usr/local/sbin/ipvanish-*       root-owned installed helpers
+/etc/systemd/system/ipvanish*    rendered systemd units
+/etc/sudoers.d/ipvanish          rendered sudoers rule
+```
+
+The root helpers intentionally remain installed as root-owned files in
+`/usr/local/sbin`. Do not replace them with symlinks to a user-writable
+directory while they are allowed by sudoers.
+
+## Requirements
+
+Expected packages:
 
 ```bash
-bin/ipvanish-auth-setup
+sudo apt install openvpn systemd ufw curl libnotify-bin zenity
 ```
 
-## Install
+Expected IPVanish files:
 
-Copy scripts into place:
+```text
+~/.config/ipvanish/auth.txt
+~/.config/ipvanish/configs/*.ovpn
+```
+
+Create or replace the auth file:
 
 ```bash
-install -m 0755 bin/ipvanish-* ~/.local/bin/
+ipvanish-auth-setup
 ```
 
-Install the systemd units, root helpers, and sudoers rule:
+The auth file contains your IPVanish username on the first line and password on
+the second line. It is written with mode `600`.
+
+## Install Or Refresh
+
+Install user commands as symlinks:
 
 ```bash
-~/.local/bin/ipvanish-install-service
+for script in ~/Documents/IPVanish/bin/ipvanish-*; do
+  ln -sfn "$script" "$HOME/.local/bin/$(basename "$script")"
+done
 ```
 
-That command installs:
+Install or refresh systemd units, root helpers, and sudoers:
+
+```bash
+ipvanish-install-service
+```
+
+This installs:
 
 ```text
 /etc/systemd/system/ipvanish.service
 /etc/systemd/system/ipvanish-watchdog.service
 /etc/systemd/system/ipvanish-watchdog.timer
+/usr/local/sbin/ipstatus
 /usr/local/sbin/ipvanish-service-control
 /usr/local/sbin/ipvanish-set-location-root
 /usr/local/sbin/ipvanish-killswitch-root
 /etc/sudoers.d/ipvanish
 ```
 
-The installer renders the systemd and sudoers templates using the current
-`${HOME}` and `${USER}` values, so the installed units point back to the
-installing user's home directory.
+## Common Usage
 
-You can override the default config/auth locations with:
+Show VPN status:
 
 ```bash
-export IPVANISH_CONFIG_DIR="${HOME}/.config/ipvanish/configs"
-export IPVANISH_AUTH_FILE="${HOME}/.config/ipvanish/auth.txt"
+ipvanish-status
+ipvanish-service-status
+ipstatus
+ipstatus --diagnose
 ```
 
-## Common Commands
+Status output is intentionally compact:
 
-Identify IPVanish systemd entries:
+```text
+IPVanish: up
+Settings: location="IL Tel Aviv" remote=tlv-c11.ipvanish.com:1194 config=ipvanish-IL-Tel-Aviv-tlv-c11.ovpn
+Tunnel: tun0
+OpenVPN: running pid=1201441
+Public network: AS62651 Strong Technology, LLC.
+ipvanish.service: active/enabled
+ipvanish-watchdog.timer: active/enabled
+ipvanish-watchdog.service: inactive/static last=success
+```
+
+`ipstatus` also shows NetworkManager, Wi-Fi radio/device/connection/signal,
+driver, and default-route state. Use `ipstatus --diagnose` when networking is
+stuck (or immediately after reboot) to include addresses, routes, DNS,
+gateway reachability, and recent NetworkManager/kernel events. Individual
+checks have short timeouts so a wedged network service does not hang the status
+command.
+
+`Public network: unknown` means the external organization lookup did not
+complete. The following `Network assessment` line combines that result with
+Wi-Fi, NetworkManager, and default-route state to distinguish a likely local
+Wi-Fi failure from an isolated external lookup failure.
+
+List available locations:
 
 ```bash
-systemctl list-unit-files '*ipvanish*'
-systemctl list-units '*ipvanish*'
-systemctl status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service
+ipvanish-list
+ipvanish-list Chicago
 ```
 
-Start, stop, and restart:
+Connect manually:
+
+```bash
+ipvanish-connect random
+ipvanish-connect Chicago
+ipvanish-connect ipvanish-US-Chicago-chi-b42
+```
+
+Set the location used by `ipvanish.service` on the next start:
+
+```bash
+ipvanish-set-location random
+ipvanish-set-location Reykjavik
+ipvanish-set-location Chicago
+```
+
+Start, stop, restart, or inspect the managed service:
 
 ```bash
 sudo ipvanish-service-control start
@@ -81,34 +161,14 @@ sudo ipvanish-service-control restart
 sudo ipvanish-service-control status
 ```
 
-Direct systemd commands:
+Enable or disable automatic startup:
 
 ```bash
-sudo systemctl start ipvanish.service
-sudo systemctl stop ipvanish.service
-sudo systemctl restart ipvanish.service
-sudo systemctl status ipvanish.service
+sudo ipvanish-service-control enable
+sudo ipvanish-service-control disable
 ```
 
-Watchdog timer:
-
-```bash
-sudo systemctl start ipvanish-watchdog.timer
-sudo systemctl stop ipvanish-watchdog.timer
-sudo systemctl restart ipvanish-watchdog.timer
-sudo systemctl status ipvanish-watchdog.timer
-```
-
-Enable or disable at boot:
-
-```bash
-sudo systemctl enable ipvanish.service
-sudo systemctl disable ipvanish.service
-sudo systemctl enable ipvanish-watchdog.timer
-sudo systemctl disable ipvanish-watchdog.timer
-```
-
-Run the health check immediately:
+Run the watchdog health check immediately:
 
 ```bash
 sudo systemctl start ipvanish-watchdog.service
@@ -122,66 +182,63 @@ journalctl -u ipvanish-watchdog.service -n 100 --no-pager
 journalctl -u ipvanish.service -f
 ```
 
-## Location Selection
-
-Use all downloaded configs randomly:
-
-```bash
-ipvanish-set-location random
-```
-
-Use a matching location randomly:
-
-```bash
-ipvanish-set-location Reykjavik
-ipvanish-set-location Chicago
-```
-
-## Status
-
-```bash
-ipvanish-status
-ipvanish-service-status
-vpn-watch
-```
-
-`ipvanish-status` shows the selected IPVanish location, `.ovpn` config path,
-remote server, tunnel interface, OpenVPN process, NetworkManager VPN state, and
-public network.
-
-## Desktop Alerts
-
-When the watchdog detects that the VPN is unhealthy, it attempts to restart
-`ipvanish.service`. If restart fails, or if no tunnel is active after restart,
-`ipvanish-healthcheck` calls `ipvanish-desktop-alert`.
-
-The alert helper uses:
-
-- `notify-send` for a desktop notification
-- `zenity` for a visible warning popup window
-
-The popup is intentionally implemented with `zenity` instead of Tk because
-Linux Mint commonly has `zenity` available and it integrates with the desktop
-session without needing a custom Python/Tk script.
-
-Test the popup manually:
-
-```bash
-ipvanish-desktop-alert critical "IPVanish test" "This is a VPN warning test."
-```
-
 ## Kill Switch
 
-Enable:
+Enable the UFW kill switch:
 
 ```bash
 ipvanish-killswitch-on
 ```
 
-Disable:
+Disable the UFW kill switch:
 
 ```bash
 ipvanish-killswitch-off
 ```
 
-The kill switch uses UFW and resets UFW rules. It allows outbound traffic through `tun0`, OpenVPN UDP `1194`, DNS, and local LAN ranges. Do not enable it during remote-only access unless you have confirmed the rules fit that environment.
+The kill switch resets UFW rules. It denies default outgoing traffic, allows
+traffic through `tun0`, allows OpenVPN UDP `1194`, allows DNS, and allows common
+RFC1918 LAN ranges. Review this before enabling it on a remote-only machine.
+
+## Configuration
+
+Useful environment overrides:
+
+```bash
+export IPVANISH_CONFIG_DIR="$HOME/.config/ipvanish/configs"
+export IPVANISH_AUTH_FILE="$HOME/.config/ipvanish/auth.txt"
+export IPVANISH_MATCH="random"
+export VPN_EXPECTED_ORG="IPVanish"
+export IPVANISH_ALERT_TIMEOUT="12"
+export IPVANISH_ALERT_WIDTH="360"
+export IPVANISH_ALERT_HEIGHT="110"
+```
+
+`IPVANISH_MATCH` is used by the systemd service. `VPN_EXPECTED_ORG` is optional
+and lets the watchdog mark the VPN unhealthy if `https://ipinfo.io/org` does not
+match the expected provider string. `IPVANISH_ALERT_TIMEOUT`,
+`IPVANISH_ALERT_WIDTH`, and `IPVANISH_ALERT_HEIGHT` tune the warning popup.
+
+## Troubleshooting
+
+Check installed unit files:
+
+```bash
+systemctl list-unit-files '*ipvanish*'
+systemctl list-units '*ipvanish*'
+systemctl status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service
+```
+
+Check OpenVPN and tunnel state:
+
+```bash
+ipvanish-status
+pgrep -a openvpn
+ip -brief link show
+```
+
+Test desktop alerts:
+
+```bash
+ipvanish-desktop-alert critical "IPVanish test" "This is a VPN warning test."
+```

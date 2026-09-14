@@ -2,6 +2,26 @@
 set -euo pipefail
 
 state_file="${IPVANISH_STATE_FILE:-/run/ipvanish/current-config}"
+diagnose=false
+
+case "${1:-}" in
+  "") ;;
+  -d|--diagnose) diagnose=true ;;
+  -h|--help)
+    printf "Usage: %s [--diagnose]\n" "$(basename "$0")"
+    printf "  --diagnose, -d  include routes, DNS, reachability, and recent Wi-Fi logs\n"
+    exit 0
+    ;;
+  *)
+    printf "Unknown option: %s\n" "$1" >&2
+    printf "Usage: %s [--diagnose]\n" "$(basename "$0")" >&2
+    exit 2
+    ;;
+esac
+
+short_command() {
+  timeout --signal=TERM 3s "$@" 2>/dev/null || true
+}
 
 format_location() {
   local name="${1}"
@@ -11,44 +31,191 @@ format_location() {
   printf "%s\n" "${name//-/ }"
 }
 
-printf "Selected IPVanish server:\n"
+unit_state() {
+  local unit="${1}"
+  local active enabled
+  active="$(systemctl is-active "${unit}" 2>/dev/null || true)"
+  enabled="$(systemctl is-enabled "${unit}" 2>/dev/null || true)"
+  printf "%s/%s" "${active:-unknown}" "${enabled:-unknown}"
+}
+
+timer_next() {
+  local next
+  next="$(systemctl show -P NextElapseUSecRealtime ipvanish-watchdog.timer 2>/dev/null || true)"
+  [[ -n "${next}" && "${next}" != "n/a" ]] || return 0
+  printf " next=%s" "${next}"
+}
+
+service_result() {
+  local result status
+  result="$(systemctl show -P Result ipvanish-watchdog.service 2>/dev/null || true)"
+  status="$(systemctl show -P ExecMainStatus ipvanish-watchdog.service 2>/dev/null || true)"
+  [[ -n "${result}" ]] && printf " last=%s" "${result}"
+  [[ -n "${status}" && "${status}" != "0" ]] && printf " exit=%s" "${status}"
+}
+
+nm_value() {
+  local field="${1}"
+  short_command nmcli -g "${field}" general
+}
+
+wifi_device=""
+wifi_state="unavailable"
+wifi_connection="none"
+wifi_radio="unknown"
+wifi_signal="unknown"
+wifi_driver="unknown"
+nm_state="unavailable"
+nm_connectivity="unknown"
+
+if command -v nmcli >/dev/null 2>&1; then
+  nm_state="$(nm_value STATE)"
+  nm_state="${nm_state:-unresponsive}"
+  nm_connectivity="$(nm_value CONNECTIVITY)"
+  nm_connectivity="${nm_connectivity:-unknown}"
+  wifi_radio="$(short_command nmcli radio wifi)"
+  wifi_radio="${wifi_radio:-unknown}"
+  wifi_device="$(short_command nmcli -t -f DEVICE,TYPE device status | awk -F: '$2 == "wifi" {print $1; exit}')"
+
+  if [[ -n "${wifi_device}" ]]; then
+    wifi_state="$(short_command nmcli -g GENERAL.STATE device show "${wifi_device}")"
+    wifi_state="${wifi_state:-unresponsive}"
+    wifi_connection="$(short_command nmcli -g GENERAL.CONNECTION device show "${wifi_device}")"
+    wifi_connection="${wifi_connection:---}"
+    wifi_signal="$(short_command nmcli -t -f IN-USE,SIGNAL device wifi list ifname "${wifi_device}" | awk -F: '$1 == "*" {print $2; exit}')"
+    wifi_signal="${wifi_signal:-unknown}"
+    if [[ -L "/sys/class/net/${wifi_device}/device/driver" ]]; then
+      wifi_driver="$(basename "$(readlink -f "/sys/class/net/${wifi_device}/device/driver")")"
+    fi
+  else
+    wifi_device="none"
+  fi
+fi
+
+default_route="$(short_command ip -4 route show default | head -n 1)"
+default_route="${default_route:-none}"
+
+location="unknown"
+config="unknown"
+remote="unknown"
 if [[ -r "${state_file}" ]]; then
   config="$(cat "${state_file}")"
-  printf "  Location: %s\n" "$(format_location "$(basename "${config}")")"
-  printf "  Config: %s\n" "${config}"
+  location="$(format_location "$(basename "${config}")")"
   if [[ -r "${config}" ]]; then
     remote="$(awk '$1 == "remote" {print $2 ":" $3; exit}' "${config}")"
-    printf "  Remote: %s\n" "${remote:-unknown}"
+    remote="${remote:-unknown}"
   fi
-else
-  printf "  unknown; %s is not readable\n" "${state_file}"
 fi
 
-printf "Tunnel interfaces:\n"
-if ip -brief link show 2>/dev/null | awk '{print $1}' | grep -E '^(tun|wg)[0-9]+$'; then
-  :
-else
-  printf "  none detected\n"
-fi
+tunnels="$({ ip -brief link show 2>/dev/null | awk '$1 ~ /^(tun|wg)[0-9]+$/ {print $1}' | paste -sd, -; } || true)"
+tunnels="${tunnels:-none}"
 
-printf "\nOpenVPN processes:\n"
-if pgrep -a openvpn; then
-  :
-else
-  printf "  none detected\n"
-fi
+openvpn_pids="$(pgrep openvpn 2>/dev/null | paste -sd, - || true)"
+openvpn_status="stopped"
+[[ -n "${openvpn_pids}" ]] && openvpn_status="running pid=${openvpn_pids}"
 
-printf "\nNetworkManager VPNs:\n"
-if command -v nmcli >/dev/null 2>&1; then
-  if nmcli -t -f NAME,TYPE,STATE connection show --active 2>/dev/null | grep ':vpn:activated$'; then
-    :
+public_org="$(curl -fsS --max-time 4 https://ipinfo.io/org 2>/dev/null || true)"
+public_org="${public_org:-unknown}"
+
+network_assessment="internet reachable"
+if [[ "${public_org}" == "unknown" ]]; then
+  if [[ "${wifi_radio}" == "disabled" ]]; then
+    network_assessment="offline: Wi-Fi radio is disabled"
+  elif [[ "${nm_state}" == "unresponsive" || "${wifi_state}" == "unresponsive" ]]; then
+    network_assessment="offline: NetworkManager or Wi-Fi device is unresponsive"
+  elif [[ "${wifi_device}" == "none" ]]; then
+    network_assessment="offline: no Wi-Fi device detected"
+  elif [[ "${default_route}" == "none" ]]; then
+    network_assessment="offline: no IPv4 default route"
+  elif [[ "${nm_connectivity}" == "none" || "${nm_connectivity}" == "limited" || "${nm_connectivity}" == "portal" ]]; then
+    network_assessment="degraded: NetworkManager connectivity=${nm_connectivity}"
   else
-    printf "  none detected by NetworkManager\n"
+    network_assessment="external lookup failed; run ipstatus --diagnose to test gateway and DNS"
   fi
-else
-  printf "  nmcli not installed\n"
 fi
 
-printf "\nPublic network:\n"
-curl -fsS --max-time 10 https://ipinfo.io/org 2>/dev/null || printf "  unknown"
-printf "\n"
+overall="down"
+if [[ "$(systemctl is-active ipvanish.service 2>/dev/null || true)" == "active" && "${tunnels}" != "none" && "${openvpn_status}" == running* ]]; then
+  overall="up"
+fi
+
+printf "IPVanish: %s\n" "${overall}"
+if [[ "${config}" == "unknown" ]]; then
+  printf "Settings: location=%s remote=%s config=%s\n" "${location}" "${remote}" "${state_file} unreadable"
+else
+  printf "Settings: location=\"%s\" remote=%s config=%s\n" "${location}" "${remote}" "$(basename "${config}")"
+fi
+printf "Tunnel: %s\n" "${tunnels}"
+printf "OpenVPN: %s\n" "${openvpn_status}"
+printf "Public network: %s\n" "${public_org}"
+printf "Network assessment: %s\n" "${network_assessment}"
+printf "NetworkManager: %s connectivity=%s\n" "${nm_state}" "${nm_connectivity}"
+printf "Wi-Fi: radio=%s device=%s state=%s connection=\"%s\" signal=%s%% driver=%s\n" \
+  "${wifi_radio}" "${wifi_device}" "${wifi_state}" "${wifi_connection}" "${wifi_signal}" "${wifi_driver}"
+printf "Default route: %s\n" "${default_route}"
+printf "ipvanish.service: %s\n" "$(unit_state ipvanish.service)"
+printf "ipvanish-watchdog.timer: %s%s\n" "$(unit_state ipvanish-watchdog.timer)" "$(timer_next)"
+printf "ipvanish-watchdog.service: %s%s\n" "$(unit_state ipvanish-watchdog.service)" "$(service_result)"
+
+if [[ "${diagnose}" == true ]]; then
+  printf "\n=== Wi-Fi diagnostics ===\n"
+  printf "Captured: %s\n" "$(date --iso-8601=seconds)"
+  printf "Kernel: %s\n" "$(uname -r)"
+
+  if [[ "${wifi_device}" != "none" && -n "${wifi_device}" ]]; then
+    printf "\n[device]\n"
+    short_command nmcli -f GENERAL,IP4,IP6 device show "${wifi_device}"
+    short_command ip -details link show dev "${wifi_device}"
+    short_command ip -brief address show dev "${wifi_device}"
+  fi
+
+  printf "\n[routes]\n"
+  short_command ip -4 route show
+  short_command ip -6 route show
+
+  printf "\n[DNS]\n"
+  if command -v resolvectl >/dev/null 2>&1; then
+    if [[ "${wifi_device}" != "none" && -n "${wifi_device}" ]]; then
+      short_command resolvectl status "${wifi_device}"
+    else
+      short_command resolvectl status
+    fi
+  else
+    short_command nmcli -g IP4.DNS,IP6.DNS device show "${wifi_device}"
+  fi
+
+  gateway="$(awk '$1 == "default" {print $3; exit}' <<<"${default_route}")"
+  printf "\n[reachability]\n"
+  if [[ -n "${gateway}" ]]; then
+    if short_command ping -n -c 1 -W 2 "${gateway}" | grep -q '1 received'; then
+      printf "Gateway %s: reachable\n" "${gateway}"
+    else
+      printf "Gateway %s: UNREACHABLE\n" "${gateway}"
+    fi
+  else
+    printf "Gateway: unavailable (no default route)\n"
+  fi
+  if short_command getent ahostsv4 ipinfo.io | grep -q .; then
+    printf "DNS lookup: working\n"
+  else
+    printf "DNS lookup: FAILED\n"
+  fi
+
+  printf "\n[recent NetworkManager events]\n"
+  nm_events="$(short_command journalctl -b 0 -u NetworkManager --no-pager -n 300 | grep -Ei "${wifi_device}|wifi|wlan|supplicant|firmware|disconnect|unavailable|failed|timeout" | tail -n 40 || true)"
+  printf "%s\n" "${nm_events:-No matching NetworkManager events found (or journal access denied).}"
+
+  printf "\n[previous boot NetworkManager Wi-Fi events]\n"
+  previous_nm_events="$(short_command journalctl -b -1 -u NetworkManager --no-pager -n 500 | grep -Ei "${wifi_device}|wifi|wlan|supplicant|firmware|disconnect|unavailable|failed|timeout" | tail -n 40 || true)"
+  printf "%s\n" "${previous_nm_events:-No matching previous-boot NetworkManager events found (or journal access denied).}"
+
+  printf "\n[recent kernel Wi-Fi warnings]\n"
+  kernel_events="$(short_command journalctl -k -b 0 --no-pager -n 400 | grep -Ei 'wifi|wlan|80211|firmware|iwl|ath|rtw|brcm|mt76|timeout|timed out|reset|hang|failed' | tail -n 40 || true)"
+  printf "%s\n" "${kernel_events:-No matching current-boot kernel messages found (or journal access denied).}"
+
+  printf "\n[previous boot kernel Wi-Fi warnings]\n"
+  previous_kernel_events="$(short_command journalctl -k -b -1 --no-pager -n 500 | grep -Ei 'wifi|wlan|80211|firmware|iwl|ath|rtw|brcm|mt76|timeout|timed out|reset|hang|failed' | tail -n 40 || true)"
+  printf "%s\n" "${previous_kernel_events:-No matching previous-boot kernel messages found (or journal access denied).}"
+
+  printf "\nTip: run ipstatus --diagnose while stuck, or immediately after a forced reboot.\n"
+fi

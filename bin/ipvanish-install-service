@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script_path="$(readlink -f "${BASH_SOURCE[0]}")"
+repo_dir="$(cd "$(dirname "${script_path}")/.." && pwd)"
 runtime_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/ipvanish-systemd"
 current_user="${SUDO_USER:-${USER}}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'EOF'
+Usage:
+  ipvanish-install-service
+
+Installs or refreshes the IPVanish systemd units, root helpers, and sudoers
+rule from the source tree.
+EOF
+  exit 0
+fi
 
 mkdir -p "${runtime_dir}/root-helpers" "${runtime_dir}/sudoers.d"
 
@@ -27,6 +39,7 @@ sed \
 sudo install -m 0644 "${runtime_dir}/ipvanish.service" /etc/systemd/system/ipvanish.service
 sudo install -m 0644 "${runtime_dir}/ipvanish-watchdog.service" /etc/systemd/system/ipvanish-watchdog.service
 sudo install -m 0644 "${runtime_dir}/ipvanish-watchdog.timer" /etc/systemd/system/ipvanish-watchdog.timer
+sudo install -m 0755 "${repo_dir}/bin/ipstatus" /usr/local/sbin/ipstatus
 sudo install -m 0755 "${runtime_dir}/root-helpers/ipvanish-service-control" /usr/local/sbin/ipvanish-service-control
 sudo install -m 0755 "${runtime_dir}/root-helpers/ipvanish-set-location-root" /usr/local/sbin/ipvanish-set-location-root
 sudo install -m 0755 "${runtime_dir}/root-helpers/ipvanish-killswitch-root" /usr/local/sbin/ipvanish-killswitch-root

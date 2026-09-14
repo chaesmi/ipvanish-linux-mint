@@ -15,7 +15,14 @@ case "${action}" in
     systemctl start ipvanish-watchdog.timer
     ;;
   status)
-    systemctl --no-pager status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service
+    target_user="${SUDO_USER:-${USER}}"
+    target_home="$(getent passwd "${target_user}" | cut -d: -f6 || true)"
+    status_cmd="${target_home}/.local/bin/ipvanish-status"
+    if [[ -x "${status_cmd}" ]]; then
+      "${status_cmd}"
+    else
+      systemctl --no-pager --full status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service
+    fi
     ;;
   enable)
     systemctl enable ipvanish.service ipvanish-watchdog.timer

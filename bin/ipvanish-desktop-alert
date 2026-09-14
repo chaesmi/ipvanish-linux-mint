@@ -7,13 +7,40 @@ message="${3:-VPN needs attention.}"
 alert_user="${IPVANISH_USER:-${USER}}"
 uid="$(id -u "${alert_user}")"
 runtime_dir="/run/user/${uid}"
+popup_timeout="${IPVANISH_ALERT_TIMEOUT:-12}"
+popup_width="${IPVANISH_ALERT_WIDTH:-360}"
+popup_height="${IPVANISH_ALERT_HEIGHT:-110}"
+notify_expire_ms="${IPVANISH_NOTIFY_EXPIRE_MS:-10000}"
+
+case "${popup_timeout}" in
+  ''|*[!0-9]*) popup_timeout=12 ;;
+esac
+
+case "${popup_width}" in
+  ''|*[!0-9]*) popup_width=360 ;;
+esac
+
+case "${popup_height}" in
+  ''|*[!0-9]*) popup_height=110 ;;
+esac
+
+case "${notify_expire_ms}" in
+  ''|*[!0-9]*) notify_expire_ms=10000 ;;
+esac
 
 export DISPLAY="${DISPLAY:-:0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-${runtime_dir}}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${runtime_dir}/bus}"
 
-notify-send -u "${urgency}" "${title}" "${message}" 2>/dev/null || true
+notify-send -u "${urgency}" -t "${notify_expire_ms}" "${title}" "${message}" 2>/dev/null || true
 
 if command -v zenity >/dev/null 2>&1; then
-  timeout 45s zenity --warning --title="${title}" --text="${message}" 2>/dev/null || true
+  timeout "$((popup_timeout + 2))s" zenity \
+    --warning \
+    --title="${title}" \
+    --text="${message}" \
+    --timeout="${popup_timeout}" \
+    --width="${popup_width}" \
+    --height="${popup_height}" \
+    2>/dev/null || true
 fi

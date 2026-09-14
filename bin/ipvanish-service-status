@@ -2,5 +2,3 @@
 set -euo pipefail
 
 "${HOME}/.local/bin/ipvanish-status"
-printf "\n"
-systemctl --no-pager --full status ipvanish.service ipvanish-watchdog.timer ipvanish-watchdog.service || true
