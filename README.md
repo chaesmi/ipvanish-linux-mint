@@ -9,10 +9,35 @@ It provides:
 - automatic health checks and restart attempts
 - desktop alerts when the watchdog cannot recover the tunnel
 - location selection for the next service start
-- optional UFW-based kill switch
+- UFW-based kill switch managed automatically with the VPN
 - narrow root helpers for systemd, UFW, and service override changes
 
 Credentials and IPVanish `.ovpn` server files are not stored in this repo.
+
+## Everyday Commands
+
+Use `ipvanish` as the single entry point. Run it without sudo; it requests
+privileges internally when needed. Installation is only required for initial
+setup or after updating scripts, helpers, or service definitions.
+
+| Command | Action |
+| --- | --- |
+| `ipvanish stop` | Stop VPN/watchdog and release kill switch |
+| `ipvanish start` | Enable kill switch and connect |
+| `ipvanish restart` | Enable kill switch and reconnect |
+| `ipvanish disable` | Stop, release kill switch, disable boot startup |
+| `ipvanish enable` | Enable protection, connect, enable boot startup |
+| `ipvanish status` | Show VPN and network status |
+| `ipvanish diagnose` | Show detailed network diagnostics |
+| `ipvanish ip` | Show public IP, location, and provider |
+| `ipvanish location Stockholm` | Choose location for the next connection |
+| `ipvanish list Chicago` | List matching locations |
+| `ipvanish install` | Install/refresh after updates |
+| `ipvanish help` | Show available commands |
+
+Location changes take effect on the next start/restart. A successful start
+request does not mean the tunnel has finished connecting; check `ipvanish status`.
+Existing `ipvanish-*` commands and `ipstatus` remain available for compatibility.
 
 ## Layout
 
@@ -20,7 +45,8 @@ Source files live here:
 
 ```text
 ~/Documents/IPVanish/
-  bin/           user-facing commands
+  bin/ipvanish   main user command
+  bin/           supporting scripts and compatibility commands
   root-helpers/  root-owned helper commands installed to /usr/local/sbin
   systemd/       systemd unit templates
   sudoers.d/     sudoers template
@@ -29,6 +55,7 @@ Source files live here:
 Installed runtime locations:
 
 ```text
+~/.local/bin/ipvanish            main command (symlink to source)
 ~/.local/bin/ipvanish-*          symlinks to ~/Documents/IPVanish/bin/
 /usr/local/sbin/ipstatus         compact status shortcut
 /usr/local/sbin/ipvanish-*       root-owned installed helpers
@@ -66,21 +93,29 @@ the second line. It is written with mode `600`.
 
 ## Install Or Refresh
 
-Install user commands as symlinks:
+For first installation, run the installer directly from the source tree:
 
 ```bash
-for script in ~/Documents/IPVanish/bin/ipvanish-*; do
-  ln -sfn "$script" "$HOME/.local/bin/$(basename "$script")"
-done
+/home/ces/Documents/IPVanish/bin/ipvanish-install-service
 ```
 
-Install or refresh systemd units, root helpers, and sudoers:
+After initial installation, refresh systemd units, root helpers, sudoers,
+and user command symlinks using:
 
 ```bash
-ipvanish-install-service
+ipvanish install
 ```
 
-This installs:
+The installer resolves service paths from the invoking user's account, including
+when run through sudo with `HOME=/root`. To repair older units containing
+`/root/.local/bin`, rerun the installer and restart the VPN:
+
+```bash
+sudo /home/ces/.local/bin/ipvanish-install-service
+sudo ipvanish-service-control restart
+```
+
+Installed files:
 
 ```text
 /etc/systemd/system/ipvanish.service
@@ -152,7 +187,41 @@ ipvanish-set-location Reykjavik
 ipvanish-set-location Chicago
 ```
 
-Start, stop, restart, or inspect the managed service:
+Temporarily stop the VPN and use normal internet access, then turn it back on:
+
+```bash
+sudo ipvanish-service-control stop
+# When ready to reconnect:
+sudo ipvanish-service-control start
+ipstatus
+```
+
+`stop` stops the watchdog timer, any running watchdog check, and the VPN. If
+UFW is active with a default deny/reject outgoing policy, it saves that policy
+and temporarily changes it to allow outgoing traffic. Existing firewall rules
+and the incoming policy remain intact; explicit blocking rules still apply.
+There is no need to run `ipvanish-killswitch-off` separately.
+
+`start`, `restart`, and `enable` turn on the kill switch **before** starting
+the VPN and watchdog timer, even if UFW was inactive or you used the standalone
+kill-switch-off command. They ensure the VPN, DNS, and LAN firewall allowances
+exist without resetting existing rules, then restrict default outgoing traffic
+(deny, or the reject policy saved during a pause). Existing explicit allow rules
+remain effective. Wait for `ipstatus` to show the VPN is up before using it.
+If connection fails, the kill switch remains on. Use `stop` to regain normal
+internet access. Repeated stops preserve the original saved policy.
+
+`pause` and `resume` are aliases for `stop` and `start`. `stop` does not change
+the boot startup setting. The saved policy lives in the root-only directory
+`/var/lib/ipvanish/`; boot startup also restores it before connecting, so a
+reboot ends the pause. The existing kill-switch on/off commands reset UFW rules;
+the combined stop/start commands do not.
+
+After updating the source scripts, install the root helper and updated systemd
+unit using `ipvanish-install-service`. This refreshes the installed files and
+enables boot startup without stopping or starting the current VPN connection.
+
+Restart or inspect the managed service:
 
 ```bash
 sudo ipvanish-service-control start
@@ -161,12 +230,17 @@ sudo ipvanish-service-control restart
 sudo ipvanish-service-control status
 ```
 
-Enable or disable automatic startup:
+Start the VPN and enable automatic startup, or stop it and disable startup:
 
 ```bash
 sudo ipvanish-service-control enable
 sudo ipvanish-service-control disable
 ```
+
+`disable` performs the same VPN/watchdog stop and firewall release as `stop`,
+then disables startup at boot. `enable` turns on the kill switch, enables
+startup at boot, and connects immediately. No separate kill-switch commands
+are needed for these managed stop/start operations.
 
 Run the watchdog health check immediately:
 

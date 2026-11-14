@@ -2,17 +2,71 @@
 set -euo pipefail
 
 action="${1:-status}"
+state_dir=/var/lib/ipvanish
+policy_file="${state_dir}/paused-output-policy"
+
+restore_firewall() {
+  local policy=deny
+  if [[ -f "${policy_file}" ]]; then
+    policy="$(cat "${policy_file}")"
+  fi
+  case "${policy}" in
+    deny|reject) ;;
+    *) printf "Invalid saved firewall policy; refusing to start VPN.\n" >&2; return 1 ;;
+  esac
+  # Recreate the VPN allowances if standalone killswitch-off cleared them.
+  /usr/local/sbin/ipvanish-killswitch-root protect "${policy}"
+  rm -f -- "${policy_file}"
+  printf "VPN kill switch enabled (outgoing policy: %s).\n" "${policy}"
+}
+
+pause_firewall() {
+  # Preserve an existing pause record across repeated stop calls.
+  if [[ ! -f "${policy_file}" ]]; then
+    local policy firewall_status
+    firewall_status="$(LC_ALL=C ufw status)"
+    if ! grep -q '^Status: active$' <<< "${firewall_status}"; then
+      return 0
+    fi
+    policy="$(sed -n 's/^DEFAULT_OUTPUT_POLICY="\([A-Z]*\)"$/\1/p' /etc/default/ufw)"
+    case "${policy}" in
+      DROP) policy=deny ;;
+      REJECT) policy=reject ;;
+      ACCEPT) return 0 ;;
+      *) printf "Cannot determine UFW outgoing policy.\n" >&2; return 1 ;;
+    esac
+    install -d -m 0700 "${state_dir}"
+    (umask 077; printf '%s\n' "${policy}" > "${policy_file}")
+  fi
+  # Keep incoming policy and existing rules; never reset UFW here.
+  ufw default allow outgoing
+  printf "VPN paused; UFW default outgoing policy is now allow.\n"
+}
+
+stop_vpn() {
+  # Stop an already-running health check as well as future timer runs.
+  systemctl stop ipvanish-watchdog.timer
+  systemctl stop ipvanish-watchdog.service
+  systemctl stop ipvanish.service
+  pause_firewall
+}
 
 case "${action}" in
-  start)
+  start|resume)
+    restore_firewall
     systemctl start ipvanish.service ipvanish-watchdog.timer
     ;;
-  stop)
-    systemctl stop ipvanish-watchdog.timer ipvanish.service
+  stop|pause)
+    stop_vpn
     ;;
   restart)
+    restore_firewall
     systemctl restart ipvanish.service
     systemctl start ipvanish-watchdog.timer
+    ;;
+  restore-firewall)
+    # Also called by ExecStartPre when booting after a pause.
+    restore_firewall
     ;;
   status)
     target_user="${SUDO_USER:-${USER}}"
@@ -25,13 +79,15 @@ case "${action}" in
     fi
     ;;
   enable)
-    systemctl enable ipvanish.service ipvanish-watchdog.timer
+    restore_firewall
+    systemctl enable --now ipvanish.service ipvanish-watchdog.timer
     ;;
   disable)
+    stop_vpn
     systemctl disable ipvanish.service ipvanish-watchdog.timer
     ;;
   *)
-    printf "Usage: ipvanish-service-control {start|stop|restart|status|enable|disable}\n" >&2
+    printf "Usage: ipvanish-service-control {start|stop|pause|resume|restart|status|enable|disable|restore-firewall}\n" >&2
     exit 2
     ;;
 esac

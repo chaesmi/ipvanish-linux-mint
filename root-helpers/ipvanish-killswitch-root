@@ -4,9 +4,16 @@ set -euo pipefail
 action="${1:-status}"
 
 case "${action}" in
-  on)
-    ufw --force reset
-    ufw default deny outgoing
+  on|protect)
+    policy="${2:-deny}"
+    case "${policy}" in
+      deny|reject) ;;
+      *) printf 'Invalid outgoing policy: %s\n' "${policy}" >&2; exit 2 ;;
+    esac
+    # Managed starts preserve existing rules; standalone on retains its reset.
+    if [[ "${action}" == on ]]; then
+      ufw --force reset
+    fi
     ufw default deny incoming
     ufw allow out on tun0
     ufw allow out 1194/udp
@@ -17,6 +24,7 @@ case "${action}" in
     ufw allow in from 10.0.0.0/8
     ufw allow in from 172.16.0.0/12
     ufw allow in from 192.168.0.0/16
+    ufw default "${policy}" outgoing
     ufw --force enable
     ufw status verbose
     ;;
@@ -31,7 +39,7 @@ case "${action}" in
     ufw status verbose
     ;;
   *)
-    printf "Usage: ipvanish-killswitch-root {on|off|status}\n" >&2
+    printf "Usage: ipvanish-killswitch-root {on|off|status|protect [deny|reject]}\n" >&2
     exit 2
     ;;
 esac

@@ -3,8 +3,19 @@ set -euo pipefail
 
 script_path="$(readlink -f "${BASH_SOURCE[0]}")"
 repo_dir="$(cd "$(dirname "${script_path}")/.." && pwd)"
-runtime_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/ipvanish-systemd"
 current_user="${SUDO_USER:-${USER}}"
+current_home="$(getent passwd "${current_user}" | cut -d: -f6)"
+if [[ -z "${current_home}" || "${current_home}" != /* ]]; then
+  printf 'Cannot determine home directory for %s\n' "${current_user}" >&2
+  exit 1
+fi
+# sudo may set HOME=/root; resolve service paths from the invoking account.
+if [[ -n "${SUDO_USER:-}" ]]; then
+  runtime_dir="$(mktemp -d /tmp/ipvanish-install.XXXXXXXX)"
+  trap 'rm -rf -- "${runtime_dir}"' EXIT
+else
+  runtime_dir="${XDG_DATA_HOME:-${current_home}/.local/share}/ipvanish-systemd"
+fi
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'EOF'
@@ -20,12 +31,12 @@ fi
 mkdir -p "${runtime_dir}/root-helpers" "${runtime_dir}/sudoers.d"
 
 sed \
-  -e "s|__HOME__|${HOME}|g" \
+  -e "s|__HOME__|${current_home}|g" \
   -e "s|__USER__|${current_user}|g" \
   "${repo_dir}/systemd/ipvanish.service" > "${runtime_dir}/ipvanish.service"
 
 sed \
-  -e "s|__HOME__|${HOME}|g" \
+  -e "s|__HOME__|${current_home}|g" \
   -e "s|__USER__|${current_user}|g" \
   "${repo_dir}/systemd/ipvanish-watchdog.service" > "${runtime_dir}/ipvanish-watchdog.service"
 
@@ -49,6 +60,13 @@ sudo visudo -cf /etc/sudoers.d/ipvanish
 sudo systemctl daemon-reload
 sudo systemctl enable ipvanish.service ipvanish-watchdog.timer
 
+# Install the complete user command set, including the main entry point.
+sudo -u "${current_user}" mkdir -p "${current_home}/.local/bin"
+for script in "${repo_dir}/bin/"*; do
+  [[ -f "${script}" && -x "${script}" ]] || continue
+  sudo -u "${current_user}" ln -sfn "${script}" "${current_home}/.local/bin/$(basename "${script}")"
+done
+
 cat <<'EOF'
 Installed and enabled:
   ipvanish.service
@@ -57,14 +75,14 @@ Installed and enabled:
 The VPN will start automatically on next boot.
 
 To start it now:
-  sudo ipvanish-service-control start
+  ipvanish start
 
 To stop it:
-  sudo ipvanish-service-control stop
+  ipvanish stop
 
 To choose a boot location:
-  sudo ipvanish-set-location-root Reykjavik
+  ipvanish location Reykjavik
 
 To check status:
-  ipvanish-service-status
+  ipvanish status
 EOF

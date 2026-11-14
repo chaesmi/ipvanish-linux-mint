@@ -10,6 +10,7 @@ Environment=IPVANISH_HOME=__HOME__
 Environment=IPVANISH_CONFIG_DIR=__HOME__/.config/ipvanish/configs
 Environment=IPVANISH_AUTH_FILE=__HOME__/.config/ipvanish/auth.txt
 Environment=IPVANISH_MATCH=random
+ExecStartPre=/usr/local/sbin/ipvanish-service-control restore-firewall
 ExecStart=__HOME__/.local/bin/ipvanish-system-start
 Restart=always
 RestartSec=10

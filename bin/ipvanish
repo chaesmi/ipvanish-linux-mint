@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+action="${1:-status}"
+if [[ $# -gt 0 ]]; then shift; fi
+
+usage() {
+  cat <<'EOF'
+Usage: ipvanish COMMAND
+
+  start | resume       Enable kill switch; start VPN and watchdog
+  stop | pause         Stop VPN and watchdog; allow normal internet
+  restart              Enable kill switch; reconnect
+  enable               Enable boot startup and connect with protection
+  disable              Stop VPN, release kill switch, disable boot startup
+  status [--diagnose]   Show VPN and network status (default command)
+  diagnose             Show detailed network diagnostics
+  location LOCATION    Select location for next connection (e.g. Stockholm)
+  list [FILTER]        List available locations
+  ip                   Show public IP, location, and provider
+  install              Install/refresh after script or service changes
+  help                 Show this help
+
+Run without sudo; privileged operations request it internally.
+Install is needed only for initial setup or after updates.
+EOF
+}
+
+case "${action}" in
+  start|stop|restart|enable|disable|pause|resume)
+    if [[ $# -ne 0 ]]; then usage >&2; exit 2; fi
+    exec sudo /usr/local/sbin/ipvanish-service-control "${action}"
+    ;;
+  status)
+    if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --diagnose ) ]]; then usage >&2; exit 2; fi
+    exec "${script_dir}/ipvanish-status" "$@"
+    ;;
+  diagnose)
+    if [[ $# -ne 0 ]]; then usage >&2; exit 2; fi
+    exec "${script_dir}/ipvanish-status" --diagnose
+    ;;
+  location)
+    if [[ $# -ne 1 || -z "$1" ]]; then usage >&2; exit 2; fi
+    exec "${script_dir}/ipvanish-set-location" "$1"
+    ;;
+  list)
+    if [[ $# -gt 1 ]]; then usage >&2; exit 2; fi
+    exec "${script_dir}/ipvanish-list" "$@"
+    ;;
+  ip)
+    if [[ $# -ne 0 ]]; then usage >&2; exit 2; fi
+    exec curl --fail --silent --show-error --max-time 10 https://ipinfo.io/json
+    ;;
+  install)
+    if [[ $# -ne 0 ]]; then usage >&2; exit 2; fi
+    exec "${script_dir}/ipvanish-install-service"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    printf 'Unknown command: %s\n' "${action}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
