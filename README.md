@@ -1,4 +1,4 @@
-# IPVanish Linux Mint Watchdog
+# IPVanish Linux Mint
 
 This repository is the source of truth for the local IPVanish OpenVPN helper
 scripts on this machine.
